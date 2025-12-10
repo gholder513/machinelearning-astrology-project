@@ -9,27 +9,29 @@ from config import HOROSCOPE_CSV
 
 def clean_text(text: str) -> str:
     """
-    Light text normalizer:
-
-    - ensure string
-    - normalize fancy quotes
+    Text normalizer used before embedding:
     - lowercase
+    - normalize fancy apostrophes to plain '
+    - keep letters, spaces, and apostrophes
     - collapse whitespace
 
-    We *do not* strip punctuation or apostrophes so that
-    sentence transformers have the richest possible input.
+    This preserves contractions like "don't" instead of turning them into "don".
     """
     if not isinstance(text, str):
         return ""
 
-    # Normalize some common unicode quotes
+    # Lowercase + normalize “smart quotes”
+    text = text.lower()
     text = (
         text.replace("’", "'")
-        .replace("“", '"')
-        .replace("”", '"')
+            .replace("`", "'")
+            .replace("‘", "'")
+            .replace("“", '"')
+            .replace("”", '"')
     )
 
-    text = text.lower()
+    # Keep letters, spaces, and apostrophes; drop other punctuation
+    text = re.sub(r"[^a-z'\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
@@ -52,6 +54,7 @@ def load_horoscopes(csv_path: str | None = None) -> pd.DataFrame:
     if "description" not in df.columns or "sign" not in df.columns:
         raise ValueError("CSV must contain 'description' and 'sign' columns.")
 
-    # Cleaned version mainly for TF-IDF; embeddings can use raw text if desired
-    df["clean_description"] = df["description"].apply(clean_text)
+    # Original description with is kept in 'description'
+    # also provide a cleaned version for embedding / analysis
+    df["clean_description"] = df["description"].astype(str).apply(clean_text)
     return df
