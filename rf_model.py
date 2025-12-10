@@ -14,15 +14,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, classification_report
 
 from load import load_horoscopes, clean_text
-from config import (
-    HOROSCOPE_CSV,
-    RF_TFIDF_MAX_FEATURES,
-    RF_TFIDF_NGRAM_RANGE,
-    RF_N_ESTIMATORS,
-    RF_MAX_DEPTH,
-    RF_TEST_SIZE,
-    RF_RANDOM_STATE,
-)
+from config import *
 
 
 def train_random_forest_from_csv(

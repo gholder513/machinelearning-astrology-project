@@ -10,14 +10,7 @@ import numpy as np
 import spacy
 from sentence_transformers import SentenceTransformer
 
-from config import (
-    EMBEDDING_MODEL_NAME,
-    EMBEDDING_BATCH_SIZE,
-    TOP_DESCRIPTIONS_PER_SIGN_FOR_TRAITS,
-    N_TRAITS_PER_SIGN,
-    MAX_PHRASE_TOKENS,
-    MIN_PHRASE_TOKENS,
-)
+from config import *
 
 # Load spaCy model once (for noun-phrase extraction)
 # Make sure you've run: python -m spacy download en_core_web_sm

@@ -8,7 +8,7 @@ import re
 from typing import Optional
 
 import pandas as pd
-from config import HOROSCOPE_CSV
+from config import *
 
 
 def clean_text(text: str) -> str:

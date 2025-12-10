@@ -10,7 +10,7 @@ from pprint import pprint
 from load import load_horoscopes
 from traits import prepare_embeddings_and_traits
 from classify import classify_with_centroids, top_examples_for_sign
-from config import N_TOP_EXAMPLES
+from config import *
 
 
 def main():

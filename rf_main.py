@@ -13,7 +13,7 @@ from __future__ import annotations
 from pprint import pprint
 
 from rf_model import train_random_forest_from_csv, predict_sign_rf
-from config import HOROSCOPE_CSV
+from config import *
 
 
 def explain_rf_probabilities():
