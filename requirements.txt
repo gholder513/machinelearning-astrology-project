@@ -5,3 +5,5 @@ sentence-transformers
 spacy
 tqdm
 torch
+openai>=1.0.0
+python-dotenv

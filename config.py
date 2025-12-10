@@ -22,6 +22,10 @@ EMBEDDING_MODEL = EMBEDDING_MODEL_NAME
 # Batch size for SentenceTransformer.encode
 EMBEDDING_BATCH_SIZE = 32  # you can lower this if you hit OOM in Docker
 
+GPT_MODEL_NAME = "gpt-4o-mini"  # or another model you have access to
+
+# Number of evaluation rounds for the horoscope accuracy session
+NUM_HOROSCOPE_ROUNDS = 10
 
 # Traits extraction and example lookup settings
 # How many traits per sign to extract for interpretability
