@@ -1,45 +1,39 @@
 """
-Utilities for loading and cleaning the horoscope dataset.
+Utilities for loading the horoscope dataset.
 """
 
+from __future__ import annotations
+
 import re
+from typing import Optional
+
 import pandas as pd
 from config import HOROSCOPE_CSV
 
 
 def clean_text(text: str) -> str:
     """
-    Text normalizer used before embedding:
+    Simple text normalizer for any classical methods (if you use them later).
     - lowercase
-    - normalize fancy apostrophes to plain '
-    - keep letters, spaces, and apostrophes
+    - keep letters, spaces, apostrophes
     - collapse whitespace
 
-    This preserves contractions like "don't" instead of turning them into "don".
+    NOTE: The embedding-based pipeline uses the *raw* description text
+    (with punctuation and apostrophes) so this is not used there.
     """
     if not isinstance(text, str):
         return ""
-
-    # Lowercase + normalize “smart quotes”
     text = text.lower()
-    text = (
-        text.replace("’", "'")
-            .replace("`", "'")
-            .replace("‘", "'")
-            .replace("“", '"')
-            .replace("”", '"')
-    )
-
-    # Keep letters, spaces, and apostrophes; drop other punctuation
-    text = re.sub(r"[^a-z'\s]", " ", text)
+    # keep letters, spaces, apostrophes
+    text = re.sub(r"[^a-z\s']", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
-def load_horoscopes(csv_path: str | None = None) -> pd.DataFrame:
+def load_horoscopes(csv_path: Optional[str] = None) -> pd.DataFrame:
     """
-    Load the horoscope CSV and return a DataFrame with:
-      columns: ['sign', 'description', 'clean_description']
+    Load the horoscope CSV and return a DataFrame with at least:
+      ['sign', 'description']
 
     Expects columns in the CSV: 'sign', 'description'.
     """
@@ -54,7 +48,7 @@ def load_horoscopes(csv_path: str | None = None) -> pd.DataFrame:
     if "description" not in df.columns or "sign" not in df.columns:
         raise ValueError("CSV must contain 'description' and 'sign' columns.")
 
-    # Original description with is kept in 'description'
-    # also provide a cleaned version for embedding / analysis
-    df["clean_description"] = df["description"].astype(str).apply(clean_text)
+    # keep raw description for embeddings; optionally keep a cleaned version
+    df["description"] = df["description"].astype(str)
+    df["clean_description"] = df["description"].apply(clean_text)
     return df

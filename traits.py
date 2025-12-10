@@ -1,200 +1,288 @@
 """
-Embedding-based utilities:
-- load the sentence-transformers model
-- compute description embeddings
-- build sign centroids
-- extract short "trait" phrases per sign for interpretability
+Embedding-based trait extraction and sign centroids.
 """
+
+from __future__ import annotations
 
 from typing import Dict, List, Tuple
 
 import numpy as np
+import spacy
 from sentence_transformers import SentenceTransformer
 
 from config import (
     EMBEDDING_MODEL_NAME,
     EMBEDDING_BATCH_SIZE,
+    TOP_DESCRIPTIONS_PER_SIGN_FOR_TRAITS,
     N_TRAITS_PER_SIGN,
+    MAX_PHRASE_TOKENS,
+    MIN_PHRASE_TOKENS,
 )
-from load import clean_text
 
-# Words that we don't want as "traits"
-BORING_WORDS = {
-    # generic function words / fillers
-    "just", "really", "very", "quite", "thing", "things", "something",
-    "anything", "everything", "nothing", "way", "time", "day", "days",
-    "right", "soon", "now", "then", "back", "away", "around", "maybe",
-    "bit", "little", "lot", "kind", "sort",
-    # vague verbs
-    "make", "makes", "making", "take", "takes", "taking",
-    "get", "gets", "getting", "go", "goes", "going",
-    "know", "knows", "knowing", "feel", "feels", "feeling",
-    "want", "wants", "wanted", "need", "needs", "needed",
-    # generic adjectives
-    "good", "bad", "better", "best", "nice", "new", "old",
-    "big", "small", "great",
-    # pronouns / generic people words
-    "someone", "everyone", "anyone", "people", "person",
-    "youre", "you", "your", "they", "them", "their",
-    # horoscope boilerplate
-    "today", "tonight", "tomorrow", "yesterday",
-    "mood", "star", "stars",
-    # contractions we don't want as traits
-    "dont", "don't", "doesnt", "doesn't", "cant", "can't",
-    "isnt", "isn't", "wont", "won't", "hasnt", "hasn't",
+# Load spaCy model once (for noun-phrase extraction)
+# Make sure you've run: python -m spacy download en_core_web_sm
+_nlp = spacy.load("en_core_web_sm")
+
+# Tokens we don't want dominating our traits
+BORING_TOKENS = {
+    "today",
+    "tonight",
+    "tomorrow",
+    "yesterday",
+    "day",
+    "week",
+    "time",
+    "things",
+    "thing",
+    "something",
+    "anything",
+    "everything",
+    "nothing",
+    "someone",
+    "anyone",
+    "everyone",
+    "people",
+    "person",
+    "way",
+    "stuff",
+    "lot",
+    "little",
+    "bit",
+    "kind",
+    "sort",
+    "friend",
+    "friends",
+    "relationship",
+    "problem",
+    "problems",
 }
+
+
+PRONOUN_POS = {"PRON", "DET"}
 
 
 def load_embedding_model() -> SentenceTransformer:
     """
-    Load the sentence-transformers model specified in config.
+    Load the sentence-transformers model.
     """
     print(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
     model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     return model
 
 
-def compute_embeddings(
+def _normalize_vec(v: np.ndarray) -> np.ndarray:
+    """
+    L2-normalize a vector to unit length (for cosine similarity via dot product).
+    """
+    norm = np.linalg.norm(v)
+    if norm == 0.0:
+        return v
+    return v / norm
+
+
+def embed_descriptions(
     model: SentenceTransformer,
     texts: List[str],
-    normalize: bool = True,
 ) -> np.ndarray:
     """
-    Compute embeddings for a list of texts.
-
-    We assume texts are already cleaned in a reasonable way (e.g., clean_text),
-    but you can also pass raw descriptions if you want.
+    Embed a list of texts into a 2D array (num_texts x dim).
+    We normalize embeddings so dot product ~= cosine similarity.
     """
     print(f"Computing embeddings for {len(texts)} descriptions...")
-    embeddings = model.encode(
+    embs = model.encode(
         texts,
         batch_size=EMBEDDING_BATCH_SIZE,
         show_progress_bar=True,
         convert_to_numpy=True,
-        normalize_embeddings=normalize,
     )
-    return embeddings  # shape: (N, D)
+    # normalize
+    embs = np.vstack([_normalize_vec(v) for v in embs])
+    return embs
 
 
 def compute_sign_centroids(
     signs: np.ndarray,
     embeddings: np.ndarray,
-) -> Tuple[Dict[str, np.ndarray], Dict[str, List[int]]]:
+) -> Dict[str, np.ndarray]:
     """
-    Build:
-      - sign_centroids: dict[sign] -> centroid embedding (1 x D)
-      - sign_to_indices: dict[sign] -> list of row indices in the dataset
+    Given one embedding per description, compute the centroid per sign.
     """
-    sign_to_indices: Dict[str, List[int]] = {}
-    for i, s in enumerate(signs):
-        sign_to_indices.setdefault(s, []).append(i)
+    centroids: Dict[str, np.ndarray] = {}
+    unique_signs = sorted(set(signs))
 
-    sign_centroids: Dict[str, np.ndarray] = {}
-    for sign, idxs in sign_to_indices.items():
-        sign_vecs = embeddings[idxs]  # (k, D)
-        centroid = sign_vecs.mean(axis=0, keepdims=True)  # (1, D)
+    for sign in unique_signs:
+        idx = np.where(signs == sign)[0]
+        sign_embs = embeddings[idx]
+        centroid = sign_embs.mean(axis=0)
+        centroid = _normalize_vec(centroid)
+        centroids[sign] = centroid
 
-        # Re-normalize centroid to unit length for clean cosine similarity
-        norm = np.linalg.norm(centroid)
-        if norm > 0:
-            centroid = centroid / norm
-        sign_centroids[sign] = centroid
-
-    return sign_centroids, sign_to_indices
+    return centroids
 
 
-def _is_content_word(word: str) -> bool:
+def _extract_candidate_phrases(text: str) -> List[str]:
     """
-    Decide if a token is "contentful" enough to be part of a trait.
+    Use spaCy to extract decent noun-phrase style candidates from a description.
+    We try to avoid:
+      - starting with pronouns/determiners ("you", "your", "this", "that")
+      - very long phrases
+      - chunks where the root isn't a NOUN/PROPN
     """
-    word = word.strip("'")  # strip leading/trailing apostrophes for check
-    if not word:
+    doc = _nlp(text)
+    candidates: List[str] = []
+
+    for chunk in doc.noun_chunks:
+        root = chunk.root
+        first = chunk[0]
+
+        # We want "real" content-y noun phrases.
+        if root.pos_ not in ("NOUN", "PROPN"):
+            continue
+        # Avoid pronoun/determiner-leading phrases ("you", "your", "this")
+        if first.pos_ in PRONOUN_POS:
+            continue
+
+        # Token length constraints
+        if not (MIN_PHRASE_TOKENS <= len(chunk) <= MAX_PHRASE_TOKENS):
+            continue
+
+        phrase = chunk.text.strip()
+        if phrase:
+            candidates.append(phrase)
+
+    # deduplicate while preserving order
+    seen = set()
+    unique_candidates: List[str] = []
+    for p in candidates:
+        key = p.lower()
+        if key not in seen:
+            seen.add(key)
+            unique_candidates.append(p)
+
+    return unique_candidates
+
+
+def _is_good_phrase(phrase: str) -> bool:
+    """
+    Filter out phrases that are mostly boring tokens.
+    """
+    tokens = [
+        t.strip(".,!?;:").lower()
+        for t in phrase.split()
+        if t.strip(".,!?;:")
+    ]
+    if not tokens:
         return False
-    if len(word) < 4:
-        return False
-    if word in BORING_WORDS:
-        return False
-    return True
 
-
-def _candidate_phrases_from_text(text: str) -> List[str]:
-    """
-    Very simple phrase extractor:
-    - clean text
-    - build bigrams of "content" words
-    - fallback to single content words if needed
-    """
-    cleaned = clean_text(text)
-    tokens = cleaned.split()
-    phrases: List[str] = []
-
-    # bigrams first
-    for i in range(len(tokens) - 1):
-        w1, w2 = tokens[i], tokens[i + 1]
-        if _is_content_word(w1) and _is_content_word(w2):
-            phrases.append(f"{w1} {w2}")
-
-    # if we didn't find any bigrams, fall back to unigrams
-    if not phrases:
-        for w in tokens:
-            if _is_content_word(w):
-                phrases.append(w)
-
-    return phrases
+    # At least one token must be non-boring and alphabetic
+    has_content = False
+    for t in tokens:
+        if not any(ch.isalpha() for ch in t):
+            continue
+        if t not in BORING_TOKENS:
+            has_content = True
+            break
+    return has_content
 
 
 def extract_sign_traits(
-    descriptions: List[str],
+    model: SentenceTransformer,
+    df,
     signs: np.ndarray,
     embeddings: np.ndarray,
-    sign_to_indices: Dict[str, List[int]],
-    sign_centroids: Dict[str, np.ndarray],
+    centroids: Dict[str, np.ndarray],
     n_traits: int | None = None,
 ) -> Dict[str, List[str]]:
     """
     For each sign:
-      - look at that sign's descriptions
-      - rank each description by similarity to the sign centroid
-      - from the most central descriptions, harvest simple n-gram "traits"
+      1. Find descriptions whose embeddings are closest to that sign's centroid.
+      2. From the top descriptions, extract noun-phrase candidates with spaCy.
+      3. Embed each candidate phrase and score it by similarity to the centroid.
+      4. Choose the top n_traits phrases as "traits" for interpretability.
 
-    Returns:
-      dict[sign] -> list of short trait strings (len ~ n_traits)
+    Returns: dict[sign] -> [trait1, trait2, trait3]
     """
     if n_traits is None:
         n_traits = N_TRAITS_PER_SIGN
 
-    traits_by_sign: Dict[str, List[str]] = {}
+    traits_per_sign: Dict[str, List[str]] = {}
+    unique_signs = sorted(set(signs))
 
-    for sign, idxs in sign_to_indices.items():
-        centroid = sign_centroids[sign]  # (1, D)
-        sign_vecs = embeddings[idxs]     # (k, D)
+    for sign in unique_signs:
+        print(f"  Mining traits for sign: {sign}")
+        idx = np.where(signs == sign)[0]
+        sign_embs = embeddings[idx]
+        sign_texts = df["description"].iloc[idx].tolist()
 
-        # Since both are normalized, cosine similarity is just dot product
-        sims = (sign_vecs @ centroid.T).ravel()  # (k,)
+        centroid = centroids[sign]
 
-        # Sort indices of this sign by similarity descending
-        order = np.argsort(sims)[::-1]
+        # Cosine similarity via dot product (all vectors are normalized)
+        sims = sign_embs @ centroid
+        # Take indices of most representative descriptions
+        top_k = min(TOP_DESCRIPTIONS_PER_SIGN_FOR_TRAITS, len(idx))
+        top_indices = np.argsort(-sims)[:top_k]
 
-        selected_traits: List[str] = []
-        seen: set[str] = set()
+        candidate_phrases: List[str] = []
 
-        # Look at the most central ~20 descriptions for this sign
-        for rank_idx in order[:20]:
-            abs_idx = idxs[rank_idx]
-            desc = descriptions[abs_idx]
+        for local_i in top_indices:
+            desc_text = sign_texts[local_i]
+            phrases = _extract_candidate_phrases(desc_text)
+            for p in phrases:
+                if _is_good_phrase(p):
+                    candidate_phrases.append(p)
 
-            # Generate candidate phrases from this description
-            candidates = _candidate_phrases_from_text(desc)
-            for phrase in candidates:
-                if phrase not in seen:
-                    seen.add(phrase)
-                    selected_traits.append(phrase)
-                    if len(selected_traits) >= n_traits:
-                        break
+        # Deduplicate while preserving order
+        seen = set()
+        candidate_phrases_unique: List[str] = []
+        for p in candidate_phrases:
+            key = p.lower()
+            if key not in seen:
+                seen.add(key)
+                candidate_phrases_unique.append(p)
 
-            if len(selected_traits) >= n_traits:
-                break
+        if not candidate_phrases_unique:
+            traits_per_sign[sign] = []
+            continue
 
-        traits_by_sign[sign] = selected_traits
+        # Score each phrase by similarity to centroid using embeddings
+        phrase_embs = model.encode(
+            candidate_phrases_unique,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
+        phrase_embs = np.vstack([_normalize_vec(v) for v in phrase_embs])
+        phrase_scores = phrase_embs @ centroid  # cosine via dot
 
-    return traits_by_sign
+        scored = list(zip(candidate_phrases_unique, phrase_scores))
+        scored.sort(key=lambda x: x[1], reverse=True)
+
+        top_traits = [p for p, _ in scored[:n_traits]]
+        traits_per_sign[sign] = top_traits
+
+    return traits_per_sign
+
+
+def prepare_embeddings_and_traits(df) -> Tuple[
+    SentenceTransformer,
+    Dict[str, np.ndarray],
+    Dict[str, List[str]],
+]:
+    """
+    High-level helper:
+      - load embedding model
+      - embed all descriptions
+      - compute sign centroids
+      - extract traits per sign
+
+    Returns:
+      model, sign_centroids, sign_traits
+    """
+    model = load_embedding_model()
+    texts = df["description"].astype(str).tolist()
+    embeddings = embed_descriptions(model, texts)
+    signs = df["sign"].values
+
+    centroids = compute_sign_centroids(signs, embeddings)
+    traits = extract_sign_traits(model, df, signs, embeddings, centroids)
+
+    return model, centroids, traits
