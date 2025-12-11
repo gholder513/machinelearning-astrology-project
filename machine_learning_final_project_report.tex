@@ -1,0 +1,338 @@
+\documentclass[10pt]{article}
+
+% ---------- Packages ----------
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}    % <-- needed for \text in math mode
+\usepackage{amssymb}
+\usepackage{hyperref}
+
+% ---------- Document ----------
+\begin{document}
+
+\title{Astrology-Inspired Text Classification and Horoscope Evaluation}
+\author{Your Name Here}
+\date{}
+\maketitle
+
+\begin{abstract}
+We built an end-to-end system that tries to guess a person's zodiac sign from a short free-form description of their personality and preferences, and then uses that machinery to generate and evaluate personalized horoscopes.
+Our goals were deliberately modest and empirical: we wanted to see how far standard machine learning tools can go in capturing the ``vibe'' of each zodiac sign, and whether users experience the resulting predictions and horoscopes as meaningfully accurate rather than generic.
+Concretely, we implemented (1) an embedding-based classifier that compares user text to centroid embeddings of horoscope descriptions, (2) a \texttt{TF-IDF} + Random Forest baseline trained directly on the horoscope text, and (3) an interactive ``AI-aided horoscope evaluator'' that combines the embedding model with a large language model to generate ten different horoscopes for a user, who then rates each one.
+The system is wrapped in a React front-end and a FastAPI back-end, containerized with Docker, and deployed using standard cloud platforms.
+We report both quantitative metrics (accuracy and per-class precision/recall for the Random Forest model) and qualitative results from pilot user sessions with the horoscope evaluator.
+Our code, data, and web demo are publicly available and designed to be straightforward to reproduce and extend.
+\end{abstract}
+
+\section{Introduction / Background / Motivation}
+
+\subsection{Problem statement in plain language}
+Astrology claims that the date you were born says something about your personality and how your life will unfold.
+Millions of people read horoscopes, identify strongly with their zodiac sign, and sometimes use these descriptions to guide everyday decisions.
+At the same time, most scientists view horoscopes as vague, non-predictive text that only feels accurate because it is written to be true for almost anyone.
+
+In this project we tried to answer a simple question in an explicit, measurable way:
+\emph{Given a short description that a person writes about themselves, can a machine learning system predict which zodiac sign they say they are, and how ``accurate'' do automatically generated horoscopes feel to them?}
+We were not trying to prove or disprove astrology as a belief system.
+Instead, we wanted to put some structure and numbers around a phenomenon that is usually discussed only anecdotally.
+
+\subsection{Current practice and its limitations}
+Today, most horoscope content is written manually by human astrologers or copywriters and published in magazines, newspapers, and online platforms.
+These horoscopes are typically:
+\begin{itemize}
+  \item \textbf{One-size-fits-all:} Everyone with the same sign sees essentially the same text.
+  \item \textbf{Static:} A reader cannot easily adapt the horoscope to their own personality or provide feedback that changes future predictions.
+  \item \textbf{Qualitatively evaluated:} There is rarely a controlled way to ask users how accurate a horoscope feels or to aggregate those answers into anything resembling a metric.
+\end{itemize}
+
+On the technical side, previous hobby projects often treat horoscope classification as a standard text classification problem with bag-of-words features and a simple classifier.
+These systems tend to ignore subtle semantics and rarely expose users to multiple models or an interactive evaluation game.
+
+\subsection{Who cares and why it matters}
+Several audiences might care about this project:
+\begin{itemize}
+  \item \textbf{Machine learning students and practitioners:} Astrology provides a playful but non-trivial case study for text classification, representation learning, evaluation design, and user interaction.
+  \item \textbf{NLP researchers:} The task highlights how easy it is for models to produce outputs that \emph{feel} specific and insightful while being trained on generic, non-causal text.
+  \item \textbf{General public and horoscope readers:} An interactive tool that lets users test how often a system gets their sign ``right'' and rate multiple horoscopes may encourage more critical thinking about why certain descriptions feel accurate.
+\end{itemize}
+
+If we are successful, the difference is not that we suddenly make astrology ``scientific''.
+Instead, we show that standard ML techniques can reproduce some of the perceived accuracy of horoscopes using only text data, and we provide concrete interfaces for people to experiment with these ideas themselves.
+
+\section{Approach}
+
+\subsection{Overall design}
+Our system has three main components:
+\begin{enumerate}
+  \item \textbf{Embedding-based classifier:} We compute dense sentence embeddings for horoscope descriptions using a pretrained transformer model (sentence-transformers/all-MiniLM-L6-v2).
+        For each zodiac sign we average embeddings of its descriptions to obtain a \emph{centroid}.
+        Given a user description, we compute its embedding and choose the sign whose centroid has highest cosine similarity.
+        We also surface similarity scores for all twelve signs and show the top training descriptions closest to the user text.
+  \item \textbf{Random Forest classifier:} We build a more traditional baseline using TF--IDF features over the same horoscope descriptions and train a scikit-learn Random Forest classifier to predict the zodiac label.
+        This model never sees user self-reports; it only learns from the original dataset.
+        It provides (a) a sanity check on how much signal is in the text and (b) clean accuracy and per-class metrics that we later display in the web UI.
+  \item \textbf{AI-aided horoscope evaluator:} We combine the embedding model with a large language model to generate ten different horoscopes for a single user based on their sign and a short self-description.
+        After each horoscope, the user rates how accurate it feels on a 1--5 scale.
+        We convert these ratings into an ``accuracy'' score and summarize the run at the end of ten rounds.
+\end{enumerate}
+
+These components are exposed through a FastAPI back-end with three main endpoints (\texttt{/api/embed/classify}, \texttt{/api/rf/classify}, and \texttt{/api/gpt/generate}) and surfaced in a React-based front-end.
+All pieces are wired together using Docker and Docker Compose, so the entire pipeline can be launched with a single command.
+
+\subsection{Why this approach and what is new}
+We chose this design for three reasons:
+\begin{itemize}
+  \item \textbf{Separation of concerns:} The embedding classifier focuses on semantic similarity between user text and horoscope descriptions; the Random Forest focuses on classification performance on the original dataset; the evaluator focuses on user perception of generated text.
+  \item \textbf{Complementary representations:} TF--IDF captures word-level statistics, which are simple and interpretable but blind to paraphrase.
+        Transformer-based sentence embeddings, by contrast, map semantically related phrases (e.g., ``Greek yogurt'' and ``European dairy'') to nearby points even when they share few words.
+        Comparing their behavior on the same task highlights the value of richer representations.
+  \item \textbf{Interactive evaluation:} Instead of stopping at offline accuracy, we built a game-like evaluation loop where people can explicitly rate multiple horoscopes that are tailored to their self-description.
+        This moves away from the usual ``read one horoscope and nod'' dynamic toward something measurable.
+\end{itemize}
+
+The novelty of our approach is not in inventing a new ML algorithm but in the way we combine standard components into a coherent, user-facing system:
+\begin{itemize}
+  \item embedding-derived ``traits'' per sign for interpretability,
+  \item a cross-model comparison between TF--IDF + Random Forest and sentence embeddings, and
+  \item a ten-round LLM-based evaluation loop with a simple but explicit scoring rule.
+\end{itemize}
+
+\subsection{Anticipated and encountered problems}
+
+\paragraph{Pre-processing challenges.}
+Early attempts used TF--IDF over raw horoscope text with simple heuristics to extract ``traits'' for each sign.
+This produced nearly useless traits: high frequency words such as ``just'', ``really'', ``soon'', and ``right'' dominated every sign, and cosine similarities between user descriptions and sign vectors were all exactly zero.
+We anticipated that noisy, filler-heavy text would cause problems, but the severity of the issue forced us to rethink our representation entirely.
+
+We responded by:
+\begin{itemize}
+  \item expanding the stopword list in our configuration file to aggressively filter common adverbs and filler words,
+  \item switching from single-word traits to short phrases, and
+  \item using sentence transformer embeddings combined with \texttt{TF-IDF}-style mining in the embedding space.
+\end{itemize}
+After this change, traits for each sign became more descriptive (e.g., ``intense emotional conversations'' for Sagittarius) and cosine similarities became informative.
+
+\paragraph{Regular expressions and tokenization.}
+We had to fix several issues related to concatenated words and punctuation.
+For example, apostrophes in phrases like ``Valentine's Day'' initially broke segmentation, and some multi-word phrases such as ``tomorrow night'' slipped through our ``boring word'' filter.
+This required iterative refinement of our regular expressions and normalization routines.
+
+\paragraph{Horoscope generation and repetition.}
+The first version of the AI-aided horoscope evaluator suffered from repetitive outputs: the language model produced almost identical paragraphs for each of the ten rounds.
+We tuned sampling parameters (\texttt{temperature}, \texttt{top\_p}, \texttt{presence\_penalty}, and \texttt{frequency\_penalty}) and introduced a small list of distinct narrative ``tones'' (e.g., practical, introspective, playful) to encourage diversity.
+This mostly solved the repetition issue while keeping horoscopes on-topic.
+
+\paragraph{Engineering challenges.}
+On the engineering side we encountered issues with:
+\begin{itemize}
+  \item managing Python and Node versions with \texttt{pyenv} and \texttt{nvm},
+  \item CSS styling (getting the app to look good and remain responsive), and
+  \item wiring front-end calls to back-end endpoints (especially \texttt{/api/gpt/generate}) through the Dockerized environment and eventual cloud deployment.
+\end{itemize}
+
+The first thing we tried did not work in almost every component: pre-processing, trait extraction, deployment, and sampling had to be refined in multiple iterations.
+
+\section{Experiments and Results}
+
+\subsection{Dataset and splits}
+Our experiments use a single dataset: a CSV file containing 768 horoscope-style descriptions labeled with one of the twelve zodiac signs.
+Each row consists of a short text and its corresponding sign.
+For supervised evaluation we randomly split the data into training and test sets; the exact split is documented in the code, but conceptually it follows the usual 80/20 pattern.
+No user-generated descriptions were used for supervised training.
+
+\subsection{Embedding-based classifier}
+For the embedding classifier we compute sentence embeddings using \texttt{all-MiniLM-L6-v2} (a 6-layer transformer with 384-dimensional embeddings).
+We average training embeddings for each sign to form a centroid, and classify a new description by choosing the sign with highest cosine similarity to its embedding.
+
+We evaluated this model qualitatively with several hand-written prompts such as:
+\begin{itemize}
+  \item ``Likes studying and playing sports.''
+  \item ``I like sushi and watches, I'm something of a collector.''
+  \item ``Like to shop for high-end things and spend time with friends.''
+\end{itemize}
+For the first two prompts the model consistently predicted \emph{Cancer} with a clear similarity margin over other signs and surfaced intuitive sample horoscopes about work, mentors, spending, and social events.
+For the third prompt it predicted \emph{Leo}, and the top training examples focused on shopping, travel, and extravagant spending.
+
+We did not perform a full quantitative evaluation of embedding-based accuracy on the held-out test set because the focus of this component was interpretability and user exploration.
+However, inspection of confusion patterns on sampled test items suggested that the embeddings capture broad personality clusters (e.g., shopping- and luxury-oriented text often maps to Leo, emotionally intense text to Scorpio or Sagittarius).
+
+\subsection{Random Forest classifier}
+The Random Forest classifier uses standard \texttt{TF-IDF} features over the same 768 descriptions.
+Each text is pre-processed with tokenization, lowercasing, and stopword filtering, then mapped to a sparse \texttt{TF-IDF} vector.
+We then train a \texttt{RandomForestClassifier} from scikit-learn on the training set.
+
+We measure performance with overall accuracy and per-class precision, recall, and F1 score, computed via scikit-learn's classification report.
+On our held-out test split the model achieves an accuracy around $0.92$.
+This is substantially higher than the $1/12 \approx 0.083$ accuracy of a naive classifier that always predicts the most common sign or chooses randomly.
+Per-class metrics reveal that some signs are easier to identify than others, which we surface in the front-end via a metrics panel that shows precision, recall, and F1 per sign.
+
+These results indicate that the horoscope text does contain enough distinctive language for a conventional supervised model to learn patterns that generalize beyond the training set, at least within the confines of this dataset.
+
+\subsection{AI-aided horoscope evaluator}
+To evaluate the generative component we log user ratings during the ten-round horoscope game.
+Given a sign and a short self-description, the system generates ten different horoscopes; after each one the user enters a rating from 1 to 5.
+We convert ratings into a simple score:
+\begin{itemize}
+  \item ratings 4 or 5 count as $1.0$,
+  \item ratings 2 or 3 count as $0.5$, and
+  \item rating 1 counts as $0$.
+\end{itemize}
+The final ``accuracy'' is the average score across ten rounds.
+
+In early runs, where the sampling parameters were not tuned and the text was highly repetitive, a typical session yielded an average score around $0.40$.
+After introducing tone diversity and tuning sampling, we observed sessions with much higher scores; in one documented run with the description ``I like sunsets, swimming and pets'' and sign Taurus, the user gave mostly high ratings, leading to an average accuracy of $0.95$.
+These numbers should be interpreted cautiously because the user sample is small and not controlled, but they suggest that users sometimes experience the generated horoscopes as personalized and accurate, even though they are produced automatically from text and embeddings.
+
+\subsection{Did we succeed?}
+By our own criteria:
+\begin{itemize}
+  \item We successfully implemented and deployed three interconnected models (embedding classifier, Random Forest classifier, and LLM-based evaluator) behind a single user interface.
+  \item The Random Forest classifier achieved strong quantitative performance on the held-out test set.
+  \item The embedding classifier produced interpretable similarity scores and plausible nearest-neighbor explanations.
+  \item The AI-aided evaluator produced a clear, actionable metric over user ratings and demonstrated both failure modes (repetition) and improvements from model and sampling tweaks.
+\end{itemize}
+We did not attempt to perform a rigorous psychological or statistical study of belief in astrology, so our conclusions are limited to model behavior on this specific dataset and small-scale user interactions.
+
+\section{Availability}
+
+\subsection{Code and licensing}
+All code for this project---including data loading, trait extraction, model training, API endpoints, and the React front-end---is available in a public GitHub repository:
+\begin{center}
+\texttt{https://github.com/gholder513/machinelearning-astrology-project}
+\end{center}
+The repository includes a clear directory structure, Docker configuration, and instructions for running the system locally.
+An open-source license (e.g., MIT) can be attached to the repository to make reuse and extension explicitly permitted; if this is not yet committed, it is a straightforward future step.
+
+\subsection{Dissemination}
+We disseminate the method in three ways:
+\begin{itemize}
+  \item \textbf{GitHub repository:} Contains source code, data, documentation, and a descriptive README that explains the motivation and pipeline in accessible language.
+  \item \textbf{Web demo:} The React front-end, deployed (e.g., on Netlify) and connected to the FastAPI back-end (e.g., on Render), allows anyone with a browser to try the classifiers and the horoscope evaluation game.
+  \item \textbf{Project report:} This paper itself documents design decisions, implementation details, and empirical results for a machine learning audience.
+\end{itemize}
+
+\section{Reproducibility}
+
+\subsection{Data and training pipeline}
+The full training data is provided in the repository as \texttt{horoscope.csv}.
+This file contains the 768 labeled descriptions used for all experiments.
+Because the dataset is relatively small, it is easy to inspect directly and to reuse in alternative models.
+
+We provide scripts that:
+\begin{itemize}
+  \item load and clean the CSV,
+  \item compute embeddings and sign centroids,
+  \item train the Random Forest classifier, and
+  \item save models and metrics to disk.
+\end{itemize}
+Anyone who clones the repository and installs the listed dependencies (or uses the Docker environment) can rerun these scripts and reproduce our results.
+
+\subsection{Model parameters and determinism}
+Most model parameters are either explicitly specified in configuration files or left as scikit-learn defaults.
+We fix random seeds where possible (e.g., in the Random Forest and train/test split) to improve determinism.
+Because the embedding model is pretrained and frozen, its parameters are fully determined by the chosen checkpoint.
+
+The large language model used in the horoscope evaluator is, by design, non-deterministic due to stochastic sampling.
+However, we log the sampling parameters and could replicate particular runs by fixing random seeds if needed.
+In practice, diversity in generated text is a feature, not a bug, for this component.
+
+\section{Discussion: Relation to Machine Learning Concepts}
+
+\subsection{Problem structure and model structure}
+Our core supervised problem can be viewed as 12-way text classification:
+\[
+\text{Input: } x = \text{short text description}, \quad
+\text{Output: } y \in \{ \text{aries}, \ldots, \text{pisces} \}.
+\]
+The Random Forest implements a conventional discriminative classifier over sparse TF--IDF vectors.
+The embedding-based classifier, by contrast, rephrases the problem as similarity search in a continuous space:
+\[
+\hat{y}(x) = \arg\max_{s} \cos(\phi(x), c_s),
+\]
+where $\phi(x)$ is the sentence embedding and $c_s$ is the centroid for sign $s$.
+This structure makes the model's decision rule easy to explain to users in terms of ``closest sign in meaning.''
+
+For the AI-aided evaluator, the structure is generative plus human-in-the-loop evaluation:
+we condition the LLM on the sign, the user description, and a small set of retrieved training examples, then treat user ratings as a noisy measurement of perceived accuracy.
+
+\subsection{Learned vs.\ fixed components}
+Several parts of our system learn parameters:
+\begin{itemize}
+  \item the Random Forest's tree structures, split thresholds, and leaf distributions,
+  \item the \texttt{TF-IDF} vocabulary and IDF weights (learned from the corpus), and
+  \item the sign centroids derived from sentence embeddings.
+\end{itemize}
+Other parts are fixed or heuristic:
+\begin{itemize}
+  \item the pretrained transformer parameters in the embedding model,
+  \item the ``boring word'' filter and regular expression rules for trait extraction,
+  \item the rule that converts per-round ratings into the final accuracy score, and
+  \item the mapping from embeddings and retrieved examples into a natural language prompt for the LLM.
+\end{itemize}
+
+\subsection{Representations and pre/post-processing}
+For the Random Forest, inputs are sparse \texttt{TF-IDF} vectors over tokenized, lowercased text with stopwords removed.
+Outputs are probability distributions over the twelve signs; we present both the argmax prediction and the full distribution in the UI.
+
+For the embedding classifier, inputs are full sentences encoded by the transformer model into dense vectors.
+We post-process these by computing cosine similarities to sign centroids and returning both the top sign and a full ranked list with scores.
+
+For the evaluator, inputs are tuples of (sign, user description, round index) plus a small set of top training examples retrieved from the embedding space.
+The LLM outputs plain text horoscopes, which are displayed in the front-end and then mapped, via user interaction, into numeric ratings.
+
+\subsection{Loss functions and optimization}
+The Random Forest does not have a single explicit loss function in the same way a neural network does, but each tree is grown greedily to maximize information gain (or equivalently minimize impurity) at each split.
+The embedding model is pretrained using contrastive learning objectives; we use it as-is without further optimization.
+The LLM is accessed as a black box via an API call; its training objective and optimizer are fixed by the provider.
+
+\subsection{Generalization and overfitting}
+The Random Forest could in principle overfit the relatively small dataset, especially if trees are deep and numerous.
+We mitigate this by:
+\begin{itemize}
+  \item using multiple trees with bootstrap sampling,
+  \item limiting certain hyperparameters (e.g., minimum samples per leaf), and
+  \item evaluating on a held-out test set rather than the training data.
+\end{itemize}
+The observed test accuracy of about $0.92$ suggests that the model generalizes reasonably well within the distribution of horoscope-style text.
+
+The embedding-based classifier relies heavily on the generalization properties of the pretrained transformer.
+Because it was trained on large, diverse text corpora, it can map user descriptions containing words never seen in our small horoscope dataset to semantically nearby regions of embedding space.
+
+For the LLM component, generalization takes a different form:
+we are less concerned with predicting labels and more concerned with whether users feel that the generated horoscopes are varied and personally relevant.
+
+\subsection{Hyperparameters and frameworks}
+Key hyperparameters include:
+\begin{itemize}
+  \item Random Forest: number of trees, maximum depth, minimum samples per split/leaf, maximum features per split.
+  \item Embedding classifier: choice of embedding model, number of nearest neighbors used to mine traits, phrase length for traits.
+  \item LLM: temperature, top-$p$, presence penalty, frequency penalty, and the choice of tone.
+\end{itemize}
+We tuned these hyperparameters manually based on validation performance, qualitative inspection, and user experience.
+For example, increasing temperature and presence penalty made horoscopes more diverse but occasionally less coherent; we settled on values that struck a balance.
+
+We used the following frameworks:
+\begin{itemize}
+  \item \textbf{Python + scikit-learn} for the Random Forest and evaluation metrics.
+  \item \textbf{Sentence-Transformers} (HuggingFace ecosystem) for the embedding model.
+  \item \textbf{FastAPI} for the back-end serving of all models.
+  \item \textbf{React} for the front-end interface.
+  \item \textbf{Docker} and \textbf{Docker Compose} to package the system.
+\end{itemize}
+We started from standard examples and documentation for each library but wrote the trait-mining logic, classifier wiring, evaluation loop, and front-end ourselves.
+
+\section{Conclusion and Future Work}
+
+We built a complete, reproducible pipeline that takes free-form user text, predicts a zodiac sign using two complementary models, and generates interactive horoscopes whose perceived accuracy can be measured.
+Along the way we confronted practical issues in text pre-processing, representation learning, interpretability, and user interface design.
+
+Future work could include:
+\begin{itemize}
+  \item more systematic quantitative evaluation of the embedding classifier on held-out data,
+  \item controlled user studies comparing generic vs.\ personalized horoscopes,
+  \item exploration of calibration methods for the Random Forest probabilities, and
+  \item extension beyond astrology to other domains where vague, relatable text is common (e.g., personality quizzes, product recommendations).
+\end{itemize}
+
+Overall, the project demonstrates how standard machine learning tools can be used to probe a culturally familiar but scientifically controversial domain, and how building an end-to-end interactive system forces careful thinking about representation, evaluation, and user experience.
+
+\end{document}

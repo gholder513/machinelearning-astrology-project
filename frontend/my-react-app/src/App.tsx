@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 import { Sparkles, Brain, MessageSquare } from "lucide-react";
-// 🔥 TraitsPanel hidden — import removed
+// TraitsPanel hidden — import removed
 // import TraitsPanel from "./TraitsPanel";
 import RFMetricsPanel, { type RFMetricRow } from "./RFMetricsPanel";
 
