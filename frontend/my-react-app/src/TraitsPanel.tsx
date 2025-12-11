@@ -26,6 +26,11 @@ const fallbackTraits: Record<string, string[]> = {
   virgo: ["work", "romance", "yesterday's festivities"],
 };
 
+
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  "http://localhost:8000";
+
 export default function TraitsPanel() {
   const [data, setData] = useState<TraitsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +44,7 @@ export default function TraitsPanel() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch("/api/traits");
+        const res = await fetch(`${API_BASE}/api/traits`);
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }

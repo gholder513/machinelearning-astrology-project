@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.pdf
+*.aux
+*.out
+*.toc
+
+frontend/
+machine_learning_final_project_report*

@@ -22,9 +22,7 @@ from rf_model import train_random_forest_from_csv, predict_sign_rf
 from traits import prepare_embeddings_and_traits
 
 
-# ---------------------------------------------------------
 # Global objects (initialized on startup)
-# ---------------------------------------------------------
 app = FastAPI(title="Zodiac Classifier API")
 
 # Embedding-based objects
@@ -46,9 +44,7 @@ rf_accuracy: float | None = None
 openai_client: Optional[OpenAI] = None
 
 
-# ---------------------------------------------------------
 # Pydantic models
-# ---------------------------------------------------------
 class EmbedRequest(BaseModel):
   text: str
 

@@ -19,6 +19,6 @@ RUN pip install spacy && \
 COPY . .
 
 # pre-download sentence-transformers model so it doesn't download on every run
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+# RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
 
 CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000"]

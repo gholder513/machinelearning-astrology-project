@@ -27,6 +27,10 @@ type HoroscopeResponse = {
 
 type Mode = "embed" | "rf" | "gpt";
 
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  "http://localhost:8000";
+
 const zodiacSigns = [
   "aries",
   "taurus",
@@ -129,7 +133,7 @@ function RFSection() {
         setMetricsLoading(true);
         setMetricsError(null);
 
-        const res = await fetch("/api/rf/metrics");
+        const res = await fetch(`${API_BASE}/api/rf/metrics`);
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         const data: RFMetricsApiResponse = await res.json();
 
@@ -215,7 +219,7 @@ function EmbeddingClassifier() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/embed/classify", {
+      const res = await fetch(`${API_BASE}/api/embed/classify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -334,7 +338,7 @@ function RandomForestClassifier() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/rf/classify", {
+      const res = await fetch(`${API_BASE}/api/rf/classify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -433,7 +437,7 @@ function HoroscopeEvaluator() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/gpt/generate", {
+      const res = await fetch(`${API_BASE}/api/gpt/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sign, description, round_index: round }),

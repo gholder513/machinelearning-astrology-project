@@ -3,14 +3,15 @@ Global configuration: paths and constants.
 """
 
 from pathlib import Path
+import os
 
 
 # Project root (directory containing this file)
 PROJECT_ROOT = Path(__file__).resolve().parent
-
 # Path to the horoscope CSV
 HOROSCOPE_CSV = PROJECT_ROOT / "horoscope.csv"
 
+API_BASE_URL = os.environ.get("VITE_API_BASE_URL", "https://zodiac-backend.onrender.com")
 
 # Embedding model settings
 # Name that traits.py / embedding pipeline uses
