@@ -1,5 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
+import { Sparkles, Brain, MessageSquare } from "lucide-react";
+// 🔥 TraitsPanel hidden — import removed
+// import TraitsPanel from "./TraitsPanel";
+import RFMetricsPanel, { type RFMetricRow } from "./RFMetricsPanel";
 
 type TopExample = {
   text: string;
@@ -40,45 +44,159 @@ const zodiacSigns = [
 
 const TOTAL_ROUNDS = 10;
 
+// Shape of the /api/rf/metrics response
+type RFMetricsApiResponse = {
+  accuracy: number;
+  classification_report: {
+    [label: string]:
+      | {
+          precision?: number;
+          recall?: number;
+          ["f1-score"]?: number;
+          support?: number;
+        }
+      | number;
+  };
+};
+
 function App() {
   const [mode, setMode] = useState<Mode>("embed");
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>Zodiac Classifier Playground</h1>
-        <p>Try the embedding model, random forest model, or AI-aided horoscope evaluator.</p>
-      </header>
+      <div className="hero-section">
+        <div className="hero-content">
+          <div className="hero-icon">
+            <Sparkles size={48} />
+          </div>
+          <h1>Zodiac Classifier Playground</h1>
+          <p>
+            Try the embedding model, random forest model, or AI-aided horoscope
+            evaluator.
+          </p>
+        </div>
+        <div className="hero-gradient"></div>
+      </div>
 
       <nav className="tab-bar">
         <button
           className={mode === "embed" ? "tab active" : "tab"}
           onClick={() => setMode("embed")}
         >
-          Embedding Classifier
+          <Brain size={18} />
+          <span>Embedding Classifier</span>
         </button>
+
         <button
           className={mode === "rf" ? "tab active" : "tab"}
           onClick={() => setMode("rf")}
         >
-          Random Forest Classifier
+          <Sparkles size={18} />
+          <span>Random Forest Classifier</span>
         </button>
+
         <button
           className={mode === "gpt" ? "tab active" : "tab"}
           onClick={() => setMode("gpt")}
         >
-          Horoscope Evaluator
+          <MessageSquare size={18} />
+          <span>Horoscope Evaluator</span>
         </button>
       </nav>
 
       <main className="main">
+
         {mode === "embed" && <EmbeddingClassifier />}
-        {mode === "rf" && <RandomForestClassifier />}
+        {mode === "rf" && <RFSection />}
         {mode === "gpt" && <HoroscopeEvaluator />}
       </main>
     </div>
   );
 }
+
+
+function RFSection() {
+  const [metricsLoading, setMetricsLoading] = useState(true);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const [rows, setRows] = useState<RFMetricRow[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMetrics = async () => {
+      try {
+        setMetricsLoading(true);
+        setMetricsError(null);
+
+        const res = await fetch("/api/rf/metrics");
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        const data: RFMetricsApiResponse = await res.json();
+
+        if (cancelled) return;
+
+        const report = data.classification_report;
+
+        const parsedRows: RFMetricRow[] = Object.entries(report)
+          .filter(
+            ([label]) =>
+              label !== "accuracy" &&
+              label !== "macro avg" &&
+              label !== "weighted avg"
+          )
+          .map(([label, value]) => {
+            const v = value as {
+              precision?: number;
+              recall?: number;
+              ["f1-score"]?: number;
+              support?: number;
+            };
+
+            return {
+              sign: label,
+              precision: v.precision ?? 0,
+              recall: v.recall ?? 0,
+              f1: v["f1-score"] ?? 0,
+              support: v.support ?? 0,
+            };
+          });
+
+        setAccuracy(data.accuracy);
+        setRows(parsedRows);
+      } catch (err: any) {
+        if (!cancelled) setMetricsError(err.message || "Failed to load RF metrics.");
+      } finally {
+        if (!cancelled) setMetricsLoading(false);
+      }
+    };
+
+    loadMetrics();
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <>
+      <RandomForestClassifier />
+
+      {metricsLoading && (
+        <div className="results">
+          <div className="loading-state">Loading Random Forest metrics…</div>
+        </div>
+      )}
+
+      {metricsError && (
+        <div className="results">
+          <div className="error-message">{metricsError}</div>
+        </div>
+      )}
+
+      {!metricsLoading && !metricsError && accuracy !== null && (
+        <RFMetricsPanel accuracy={accuracy} rows={rows} />
+      )}
+    </>
+  );
+}
+
 
 function EmbeddingClassifier() {
   const [text, setText] = useState("");
@@ -89,10 +207,12 @@ function EmbeddingClassifier() {
   const handleSubmit = async () => {
     setError(null);
     setResult(null);
+
     if (!text.trim()) {
       setError("Please enter a description to classify.");
       return;
     }
+
     setLoading(true);
     try {
       const res = await fetch("/api/embed/classify", {
@@ -100,13 +220,11 @@ function EmbeddingClassifier() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!res.ok) {
-        throw new Error(`HTTP error ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+
       const data: EmbedResponse = await res.json();
       setResult(data);
     } catch (err: any) {
-      console.error(err);
       setError(err.message || "Failed to classify.");
     } finally {
       setLoading(false);
@@ -120,69 +238,84 @@ function EmbeddingClassifier() {
 
   return (
     <section className="panel">
-      <h2>Embedding-based Classifier (Sentence Transformers)</h2>
-      <p>
-        Enter a free-form description. The backend will predict your zodiac
-        sign using the embedding centroids and show cosine similarities and
-        the closest training horoscopes for the predicted sign.
-      </p>
+      <div className="panel-header">
+        <h2>Embedding-based Classifier (Sentence Transformers)</h2>
+        <p>
+          Enter a description. The model predicts your zodiac sign using cosine
+          similarity to centroid embeddings.
+        </p>
+      </div>
 
-      <textarea
-        className="input-textarea"
-        rows={4}
-        placeholder="E.g., I love deep conversations, traveling alone, and solving puzzles..."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
+      <div className="input-group">
+        <textarea
+          className="input-textarea"
+          rows={4}
+          placeholder="E.g., I love deep conversations, traveling alone..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
+          {loading ? "Classifying..." : "Classify"}
+        </button>
+      </div>
 
-      <button onClick={handleSubmit} disabled={loading}>
-        {loading ? "Classifying..." : "Classify"}
-      </button>
-
-      {error && <p className="error">{error}</p>}
+      {error && <div className="error-message">{error}</div>}
 
       {result && (
         <div className="results">
-          <h3>Predicted sign: {result.predicted_sign ?? "No signal"}</h3>
+          <div className="result-highlight">
+            <span className="result-label">Predicted sign:</span>
+            <span className="result-value">
+              {result.predicted_sign ?? "No signal"}
+            </span>
+          </div>
+
           {sortedSimilarities.length > 0 && (
-            <>
-              <h4>Similarities (cosine, descending)</h4>
-              <p className="hint">
-                Values are cosine similarity between your description and each
-                sign's centroid. Closer to 1.0 = more semantically similar.
-              </p>
-              <ul className="mono-list">
+            <div className="result-section">
+              <h4>Similarities</h4>
+              <p className="hint">Cosine similarity with each sign centroid.</p>
+
+              <div className="similarity-grid">
                 {sortedSimilarities.map(([sign, score]) => (
-                  <li key={sign}>
-                    <strong>{sign}</strong>: {score.toFixed(4)}
-                  </li>
+                  <div key={sign} className="similarity-card">
+                    <span className="similarity-sign">{sign}</span>
+                    <div className="similarity-bar-container">
+                      <div
+                        className="similarity-bar"
+                        style={{ width: `${score * 100}%` }}
+                      />
+                    </div>
+                    <span className="similarity-score">{score.toFixed(4)}</span>
+                  </div>
                 ))}
-              </ul>
-            </>
+              </div>
+            </div>
           )}
 
           {result.top_examples.length > 0 && (
-            <>
-              <h4>Most similar training horoscopes for {result.predicted_sign}</h4>
-              <ol>
+            <div className="result-section">
+              <h4>Closest Training Examples</h4>
+              <div className="examples-list">
                 {result.top_examples.map((ex, idx) => (
-                  <li key={idx}>
-                    <div className="example-card">
-                      <div className="example-meta">
-                        Similarity: {ex.similarity.toFixed(4)}
-                      </div>
-                      <div className="example-text">{ex.text}</div>
+                  <div key={idx} className="example-card">
+                    <div className="example-header">
+                      <span className="example-number">#{idx + 1}</span>
+                      <span className="example-similarity">
+                        {ex.similarity.toFixed(4)}
+                      </span>
                     </div>
-                  </li>
+                    <div className="example-text">{ex.text}</div>
+                  </div>
                 ))}
-              </ol>
-            </>
+              </div>
+            </div>
           )}
         </div>
       )}
     </section>
   );
 }
+
 
 function RandomForestClassifier() {
   const [text, setText] = useState("");
@@ -193,10 +326,12 @@ function RandomForestClassifier() {
   const handleSubmit = async () => {
     setError(null);
     setResult(null);
+
     if (!text.trim()) {
       setError("Please enter a description to classify.");
       return;
     }
+
     setLoading(true);
     try {
       const res = await fetch("/api/rf/classify", {
@@ -204,13 +339,11 @@ function RandomForestClassifier() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!res.ok) {
-        throw new Error(`HTTP error ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+
       const data: RFResponse = await res.json();
       setResult(data);
     } catch (err: any) {
-      console.error(err);
       setError(err.message || "Failed to classify.");
     } finally {
       setLoading(false);
@@ -224,45 +357,63 @@ function RandomForestClassifier() {
 
   return (
     <section className="panel">
-      <h2>Random Forest Classifier</h2>
-      <p>
-        This uses a TF-IDF + Random Forest model trained on the horoscope descriptions.
-        It returns a probability distribution over all signs.
-      </p>
+      <div className="panel-header">
+        <h2>Random Forest Classifier</h2>
+        <p>
+          A TF-IDF + Random Forest trained model returning a probability
+          distribution across zodiac signs.
+        </p>
+      </div>
 
-      <textarea
-        className="input-textarea"
-        rows={4}
-        placeholder="E.g., I love helping people, organizing things, and planning ahead..."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
+      <div className="input-group">
+        <textarea
+          className="input-textarea"
+          rows={4}
+          placeholder="E.g., I love helping people, organizing things..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
 
-      <button onClick={handleSubmit} disabled={loading}>
-        {loading ? "Classifying..." : "Classify with Random Forest"}
-      </button>
+        <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
+          {loading ? "Classifying..." : "Classify with Random Forest"}
+        </button>
+      </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <div className="error-message">{error}</div>}
 
       {result && (
         <div className="results">
-          <h3>Predicted sign: {result.predicted_sign}</h3>
-          <p className="hint">
-            These decimals are predicted probabilities from the Random Forest model
-            and should sum to 1.0 across all signs.
-          </p>
-          <ul className="mono-list">
-            {sortedProba.map(([sign, p]) => (
-              <li key={sign}>
-                <strong>{sign}</strong>: {p.toFixed(4)}
-              </li>
-            ))}
-          </ul>
+          <div className="result-highlight">
+            <span className="result-label">Predicted sign:</span>
+            <span className="result-value">{result.predicted_sign}</span>
+          </div>
+
+          <div className="result-section">
+            <p className="hint">
+              Probabilities predicted by the Random Forest — they sum to 1.0.
+            </p>
+
+            <div className="probability-grid">
+              {sortedProba.map(([sign, p]) => (
+                <div key={sign} className="probability-card">
+                  <span className="probability-sign">{sign}</span>
+                  <div className="probability-bar-container">
+                    <div
+                      className="probability-bar"
+                      style={{ width: `${p * 100}%` }}
+                    />
+                  </div>
+                  <span className="probability-score">{p.toFixed(4)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </section>
   );
 }
+
 
 function HoroscopeEvaluator() {
   const [sign, setSign] = useState<string>("aries");
@@ -271,7 +422,7 @@ function HoroscopeEvaluator() {
   const [roundIndex, setRoundIndex] = useState(1);
   const [currentHoroscope, setCurrentHoroscope] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [accuracyScore, setAccuracyScore] = useState(0); // sum of scores
+  const [accuracyScore, setAccuracyScore] = useState(0);
   const [completedRounds, setCompletedRounds] = useState(0);
   const [finished, setFinished] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -285,19 +436,13 @@ function HoroscopeEvaluator() {
       const res = await fetch("/api/gpt/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sign,
-          description,
-          round_index: round,
-        }),
+        body: JSON.stringify({ sign, description, round_index: round }),
       });
-      if (!res.ok) {
-        throw new Error(`HTTP error ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+
       const data: HoroscopeResponse = await res.json();
       setCurrentHoroscope(data.horoscope);
     } catch (err: any) {
-      console.error(err);
       setError(err.message || "Failed to generate horoscope.");
     } finally {
       setLoading(false);
@@ -306,22 +451,19 @@ function HoroscopeEvaluator() {
 
   const startSession = async () => {
     if (!canStart) return;
+
     setStarted(true);
     setRoundIndex(1);
     setAccuracyScore(0);
     setCompletedRounds(0);
     setFinished(false);
+
     await fetchHoroscope(1);
   };
 
   const handleRating = (rating: number) => {
-    // Map rating 1-5 to the same semantics as CLI:
-    // 4 or 5 => +1, 2 or 3 => +0.5, 1 => +0
-    if (rating >= 4) {
-      setAccuracyScore((s) => s + 1);
-    } else if (rating === 2 || rating === 3) {
-      setAccuracyScore((s) => s + 0.5);
-    }
+    if (rating >= 4) setAccuracyScore((s) => s + 1);
+    else if (rating === 2 || rating === 3) setAccuracyScore((s) => s + 0.5);
 
     const newCompleted = completedRounds + 1;
     setCompletedRounds(newCompleted);
@@ -341,29 +483,33 @@ function HoroscopeEvaluator() {
 
   return (
     <section className="panel">
-      <h2>AI-aided Horoscope Evaluator</h2>
-      <p>
-        Enter your sign and a short description once. Then the system will
-        generate {TOTAL_ROUNDS} different horoscopes for you, assisted by the
-        embedding model and training examples. You rate each one from 1–5, and
-        we compute an overall accuracy score.
-      </p>
+      <div className="panel-header">
+        <h2>AI-aided Horoscope Evaluator</h2>
+        <p>
+          The system generates {TOTAL_ROUNDS} horoscopes. You rate each 1–5,
+          and an accuracy score is computed.
+        </p>
+      </div>
 
       {!started && (
-        <div className="form-grid">
-          <label>
-            Your zodiac sign
-            <select value={sign} onChange={(e) => setSign(e.target.value)}>
+        <div className="form-container">
+          <div className="form-field">
+            <label>Your zodiac sign</label>
+            <select
+              className="select-input"
+              value={sign}
+              onChange={(e) => setSign(e.target.value)}
+            >
               {zodiacSigns.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
             </select>
-          </label>
+          </div>
 
-          <label>
-            Short description of yourself
+          <div className="form-field">
+            <label>Short description of yourself</label>
             <textarea
               className="input-textarea"
               rows={3}
@@ -371,22 +517,37 @@ function HoroscopeEvaluator() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
-          </label>
+          </div>
 
-          <button onClick={startSession} disabled={!canStart || loading}>
+          <button
+            className="btn-primary"
+            onClick={startSession}
+            disabled={!canStart || loading}
+          >
             {loading ? "Starting..." : "Start 10-round evaluation"}
           </button>
-          {error && <p className="error">{error}</p>}
+          {error && <div className="error-message">{error}</div>}
         </div>
       )}
 
       {started && !finished && (
         <div className="results">
-          <h3>
-            Round {roundIndex} of {TOTAL_ROUNDS}
-          </h3>
-          {loading && <p>Generating horoscope...</p>}
-          {error && <p className="error">{error}</p>}
+          <div className="round-indicator">
+            <span className="round-text">
+              Round {roundIndex} of {TOTAL_ROUNDS}
+            </span>
+            <div className="progress-bar">
+              <div
+                className="progress-fill"
+                style={{
+                  width: `${(completedRounds / TOTAL_ROUNDS) * 100}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {loading && <div className="loading-state">Generating horoscope…</div>}
+          {error && <div className="error-message">{error}</div>}
 
           {currentHoroscope && !loading && (
             <>
@@ -396,47 +557,57 @@ function HoroscopeEvaluator() {
               </div>
 
               <div className="rating-section">
-                <p>How accurate does this feel for you? (1 = not at all, 5 = very accurate)</p>
+                <p className="rating-question">
+                  How accurate does this feel? (1–5)
+                </p>
                 <div className="rating-buttons">
                   {[1, 2, 3, 4, 5].map((n) => (
-                    <button key={n} onClick={() => handleRating(n)}>
+                    <button
+                      key={n}
+                      className="rating-btn"
+                      onClick={() => handleRating(n)}
+                    >
                       {n}
                     </button>
                   ))}
                 </div>
               </div>
+
+              <p className="hint">
+                4–5 = +1 point, 2–3 = +0.5, 1 = +0.
+              </p>
             </>
           )}
-
-          <p className="hint">
-            Partial scores (2 or 3) count as 0.5, while 4–5 count as 1.0 toward
-            the final accuracy.
-          </p>
         </div>
       )}
 
       {finished && (
         <div className="results">
-          <h3>Session complete!</h3>
-          <p>
-            You rated {completedRounds} horoscopes. Overall accuracy
-            (average score where 4–5 = 1.0, 2–3 = 0.5, 1 = 0.0):
-          </p>
-          <p className="accuracy-value">{overallAccuracy.toFixed(2)}</p>
+          <div className="completion-card">
+            <h3>Session complete!</h3>
+            <p>
+              You rated {completedRounds} horoscopes.  
+              Overall accuracy:
+            </p>
+            <div className="accuracy-display">
+              {overallAccuracy.toFixed(2)}
+            </div>
 
-          <button
-            onClick={() => {
-              setStarted(false);
-              setFinished(false);
-              setRoundIndex(1);
-              setAccuracyScore(0);
-              setCompletedRounds(0);
-              setCurrentHoroscope(null);
-              setError(null);
-            }}
-          >
-            Start another session
-          </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setStarted(false);
+                setFinished(false);
+                setRoundIndex(1);
+                setAccuracyScore(0);
+                setCompletedRounds(0);
+                setCurrentHoroscope(null);
+                setError(null);
+              }}
+            >
+              Start another session
+            </button>
+          </div>
         </div>
       )}
     </section>

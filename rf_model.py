@@ -1,10 +1,11 @@
+# rf_model.py
 """
 Random Forest pipeline for zodiac sign classification based on descriptions.
 """
 
 from __future__ import annotations
 
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Any
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -19,16 +20,21 @@ from config import *
 
 def train_random_forest_from_csv(
     csv_path: str | None = None,
-) -> Tuple[TfidfVectorizer, LabelEncoder, RandomForestClassifier]:
+) -> Tuple[
+    TfidfVectorizer,
+    LabelEncoder,
+    RandomForestClassifier,
+    Dict[str, Any],
+    float,
+]:
     """
     Train a Random Forest classifier on horoscope descriptions -> sign.
 
-    Returns:
-      vectorizer: fitted TfidfVectorizer
-      label_encoder: fitted LabelEncoder for sign strings
-      clf: trained RandomForestClassifier
+    returns vectorizer, label_encoder, clf,
+      rf_report_dict: sklearn classification_report as a dict
+      rf_accuracy: overall accuracy from the report
     """
-    # 1. Load data
+    # Load data
     df = load_horoscopes(csv_path)
     print(f"Loaded {len(df)} rows from {HOROSCOPE_CSV}")
 
@@ -36,7 +42,7 @@ def train_random_forest_from_csv(
     X_text = df["clean_description"].tolist()
     y_str = df["sign"].astype(str).tolist()
 
-    # 2. Vectorize text with TF-IDF
+    # Vectorize text with TF-IDF
     print("Building TF-IDF features for Random Forest...")
     vectorizer = TfidfVectorizer(
         max_features=RF_TFIDF_MAX_FEATURES,
@@ -45,11 +51,11 @@ def train_random_forest_from_csv(
     )
     X = vectorizer.fit_transform(X_text)
 
-    # 3. Encode labels
+    # Encode labels
     label_encoder = LabelEncoder()
     y = label_encoder.fit_transform(y_str)
 
-    # 4. Train/test split
+    # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -58,7 +64,7 @@ def train_random_forest_from_csv(
         stratify=y,
     )
 
-    # 5. Train Random Forest
+    # Train Random Forest
     print("Training Random Forest classifier...")
     clf = RandomForestClassifier(
         n_estimators=RF_N_ESTIMATORS,
@@ -70,21 +76,35 @@ def train_random_forest_from_csv(
 
     # 6. Evaluate
     y_pred = clf.predict(X_test)
+
+    # Overall accuracy from accuracy_score (for printing)
     acc = accuracy_score(y_test, y_pred)
     print(f"\nRandom Forest accuracy on held-out test set: {acc:.4f}\n")
-    print("Classification report (by zodiac sign):")
-    target_names = label_encoder.inverse_transform(sorted(set(y)))
-    print(
-        classification_report(
-            y_test,
-            y_pred,
-            target_names=target_names,
-            digits=4,
-            zero_division=0,
-        )
-    )
 
-    return vectorizer, label_encoder, clf
+    # Text report for console
+    target_names = label_encoder.inverse_transform(sorted(set(y)))
+    print("Classification report (by zodiac sign):")
+    text_report = classification_report(
+        y_test,
+        y_pred,
+        target_names=target_names,
+        digits=4,
+        zero_division=0,
+    )
+    print(text_report)
+
+    # Report as a dict for return
+    rf_report_dict: Dict[str, Any] = classification_report(
+        y_test,
+        y_pred,
+        target_names=target_names,
+        digits=4,
+        zero_division=0,
+        output_dict=True,
+    )
+    rf_accuracy: float = float(rf_report_dict["accuracy"])
+
+    return vectorizer, label_encoder, clf, rf_report_dict, rf_accuracy
 
 
 def predict_sign_rf(
@@ -96,9 +116,7 @@ def predict_sign_rf(
     """
     Predict zodiac sign for a new description using the trained Random Forest.
 
-    Returns:
-      best_sign: predicted sign string
-      proba_dict: dict of sign -> probability
+    retruns: best_sign, proba_dict
     """
     clean = clean_text(text)
     X_vec = vectorizer.transform([clean])
