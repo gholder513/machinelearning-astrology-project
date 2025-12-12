@@ -22,10 +22,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 #  Download spaCy model (spacy is already installed from requirements.txt)
 RUN python -m spacy download en_core_web_sm
 
+# RUN python precompute_assets.py
+
 #  Copy the app code
 COPY . .
 
 # pre-download the sentence-transformers model to avoid doing it at runtime
-# RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
 
-CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000"]
+ENV PORT=8000
+
+EXPOSE 8000
+
+CMD ["sh", "-c", "uvicorn api_server:app --host 0.0.0.0 --port ${PORT}"]
