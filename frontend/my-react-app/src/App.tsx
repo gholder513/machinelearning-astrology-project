@@ -76,7 +76,7 @@ function BootOverlay({ visible }: { visible: boolean }) {
 
     const intervalId = window.setInterval(() => {
       setIndex((i) => (i + 1) % BOOT_MESSAGES.length);
-    }, 2000); // change message every 2s
+    }, 7000); // change message every 7s
 
     return () => {
       window.clearInterval(intervalId);
