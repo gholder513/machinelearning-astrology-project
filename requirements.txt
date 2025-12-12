@@ -1,12 +1,10 @@
 pandas
 numpy
 scikit-learn
-sentence-transformers
+sentence-transformers==2.7.0
 spacy
 tqdm
-torch
 openai>=1.0.0
 python-dotenv
 fastapi
 uvicorn[standard]
-python-dotenv

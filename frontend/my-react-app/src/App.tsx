@@ -73,10 +73,10 @@ function App() {
           <div className="hero-icon">
             <Sparkles size={48} />
           </div>
-          <h1>Zodiac Classifier Playground</h1>
+          <h1>Zodiac Machine Learning Classifier </h1>
           <p>
-            Try the embedding model, random forest model, or AI-aided horoscope
-            evaluator.
+            The website that uses machine learning to guess your horoscope trained on 2000+ characteristics and 700+ user fed descriptions.
+            Try the embedding model, random forest model, or AI-aided horoscope evaluator.
           </p>
         </div>
         <div className="hero-gradient"></div>
@@ -133,7 +133,7 @@ function RFSection() {
         setMetricsLoading(true);
         setMetricsError(null);
 
-        const res = await fetch(`${API_BASE}/api/rf/metrics`);
+        const res = await fetch(`${API_BASE}/rf/metrics`);
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         const data: RFMetricsApiResponse = await res.json();
 
@@ -219,7 +219,7 @@ function EmbeddingClassifier() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/embed/classify`, {
+      const res = await fetch(`${API_BASE}/embed/classify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -338,7 +338,7 @@ function RandomForestClassifier() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/rf/classify`, {
+      const res = await fetch(`${API_BASE}/rf/classify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -437,7 +437,7 @@ function HoroscopeEvaluator() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/gpt/generate`, {
+      const res = await fetch(`${API_BASE}/gpt/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sign, description, round_index: round }),

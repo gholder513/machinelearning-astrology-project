@@ -7,6 +7,7 @@ import os
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel
 
@@ -24,6 +25,16 @@ from traits import prepare_embeddings_and_traits
 
 # Global objects (initialized on startup)
 app = FastAPI(title="Zodiac Classifier API")
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # or restrict to Netlify domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # Embedding-based objects
 embedding_model = None

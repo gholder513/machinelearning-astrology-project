@@ -44,7 +44,7 @@ export default function TraitsPanel() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch(`${API_BASE}/api/traits`);
+        const res = await fetch(`${API_BASE}/traits`);
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }
