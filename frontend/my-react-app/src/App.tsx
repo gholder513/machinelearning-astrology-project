@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 import { Sparkles, Brain, MessageSquare } from "lucide-react";
-// TraitsPanel hidden — import removed
-// import TraitsPanel from "./TraitsPanel";
 import RFMetricsPanel, { type RFMetricRow } from "./RFMetricsPanel";
 
 type TopExample = {
@@ -48,7 +46,7 @@ const zodiacSigns = [
 
 const TOTAL_ROUNDS = 10;
 
-// Shape of the /api/rf/metrics response
+// Shape of the /rf/metrics response
 type RFMetricsApiResponse = {
   accuracy: number;
   classification_report: {
@@ -63,11 +61,56 @@ type RFMetricsApiResponse = {
   };
 };
 
+// Global boot overlay for "models are loading" state
+const BOOT_MESSAGES = [
+  "Machine Learning Models Training...",
+  "Loading Horoscope Dataset...",
+  "Fetching Horoscope Characteristics...",
+];
+
+function BootOverlay({ visible }: { visible: boolean }) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (!visible) return;
+
+    const intervalId = window.setInterval(() => {
+      setIndex((i) => (i + 1) % BOOT_MESSAGES.length);
+    }, 2000); // change message every 2s
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <div className="boot-overlay">
+      <div className="boot-card">
+        <div className="boot-spinner" />
+        <h3 className="boot-title">{BOOT_MESSAGES[index]}</h3>
+        <p className="boot-subtitle">
+          This can take a moment on the first load while the models warm up.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Root App
+// ---------------------------------------------------------------------------
+
 function App() {
   const [mode, setMode] = useState<Mode>("embed");
+  const [backendBooting, setBackendBooting] = useState(false);
 
   return (
     <div className="app">
+      {/* Global overlay that shows when backend is spinning up */}
+      <BootOverlay visible={backendBooting} />
+
       <div className="hero-section">
         <div className="hero-content">
           <div className="hero-icon">
@@ -75,8 +118,10 @@ function App() {
           </div>
           <h1>Zodiac Machine Learning Classifier </h1>
           <p>
-            The website that uses machine learning to guess your horoscope trained on 2000+ characteristics and 700+ user fed descriptions.
-            Try the embedding model, random forest model, or AI-aided horoscope evaluator.
+            The website that uses machine learning to guess your horoscope
+            trained on 2000+ characteristics and 700+ user fed descriptions.
+            Try the embedding model, random forest model, or AI-aided horoscope
+            evaluator.
           </p>
         </div>
         <div className="hero-gradient"></div>
@@ -96,7 +141,7 @@ function App() {
           onClick={() => setMode("rf")}
         >
           <Sparkles size={18} />
-          <span>Random Forest Classifier</span>
+          <span>Machine Learning (Random Forest) Classifier</span>
         </button>
 
         <button
@@ -109,17 +154,24 @@ function App() {
       </nav>
 
       <main className="main">
-
-        {mode === "embed" && <EmbeddingClassifier />}
-        {mode === "rf" && <RFSection />}
-        {mode === "gpt" && <HoroscopeEvaluator />}
+        {mode === "embed" && (
+          <EmbeddingClassifier onBackendBooting={setBackendBooting} />
+        )}
+        {mode === "rf" && <RFSection onBackendBooting={setBackendBooting} />}
+        {mode === "gpt" && (
+          <HoroscopeEvaluator onBackendBooting={setBackendBooting} />
+        )}
       </main>
     </div>
   );
 }
 
-
-function RFSection() {
+// RF Section (metrics + classifier)
+function RFSection({
+  onBackendBooting,
+}: {
+  onBackendBooting: (active: boolean) => void;
+}) {
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [metricsError, setMetricsError] = useState<string | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
@@ -167,20 +219,36 @@ function RFSection() {
 
         setAccuracy(data.accuracy);
         setRows(parsedRows);
+        onBackendBooting(false);
       } catch (err: any) {
-        if (!cancelled) setMetricsError(err.message || "Failed to load RF metrics.");
+        if (!cancelled) {
+          const msg = err.message || "Failed to load RF metrics.";
+          setMetricsError(msg);
+
+          const lower = msg.toLowerCase();
+          if (
+            lower.includes("failed to fetch") ||
+            lower.includes("networkerror") ||
+            lower.includes("load failed")
+          ) {
+            onBackendBooting(true);
+            window.setTimeout(() => onBackendBooting(false), 10000);
+          }
+        }
       } finally {
         if (!cancelled) setMetricsLoading(false);
       }
     };
 
     loadMetrics();
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [onBackendBooting]);
 
   return (
     <>
-      <RandomForestClassifier />
+      <RandomForestClassifier onBackendBooting={onBackendBooting} />
 
       {metricsLoading && (
         <div className="results">
@@ -201,8 +269,12 @@ function RFSection() {
   );
 }
 
-
-function EmbeddingClassifier() {
+// Embedding Classifier
+function EmbeddingClassifier({
+  onBackendBooting,
+}: {
+  onBackendBooting: (active: boolean) => void;
+}) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EmbedResponse | null>(null);
@@ -218,7 +290,15 @@ function EmbeddingClassifier() {
     }
 
     setLoading(true);
+
+    // Show "models loading" overlay if the request takes longer than this.
+    let bootTimer: number | undefined;
+
     try {
+      bootTimer = window.setTimeout(() => {
+        onBackendBooting(true);
+      }, 1500);
+
       const res = await fetch(`${API_BASE}/embed/classify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,8 +308,26 @@ function EmbeddingClassifier() {
 
       const data: EmbedResponse = await res.json();
       setResult(data);
+
+      if (bootTimer) window.clearTimeout(bootTimer);
+      onBackendBooting(false);
     } catch (err: any) {
-      setError(err.message || "Failed to classify.");
+      if (bootTimer) window.clearTimeout(bootTimer);
+
+      const msg = err?.message || "Failed to classify.";
+      setError(msg);
+
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes("failed to fetch") ||
+        lower.includes("networkerror") ||
+        lower.includes("load failed")
+      ) {
+        onBackendBooting(true);
+        window.setTimeout(() => onBackendBooting(false), 10000);
+      } else {
+        onBackendBooting(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -289,7 +387,9 @@ function EmbeddingClassifier() {
                         style={{ width: `${score * 100}%` }}
                       />
                     </div>
-                    <span className="similarity-score">{score.toFixed(4)}</span>
+                    <span className="similarity-score">
+                      {score.toFixed(4)}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -320,8 +420,12 @@ function EmbeddingClassifier() {
   );
 }
 
-
-function RandomForestClassifier() {
+// Random Forest Classifier
+function RandomForestClassifier({
+  onBackendBooting,
+}: {
+  onBackendBooting: (active: boolean) => void;
+}) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RFResponse | null>(null);
@@ -337,7 +441,13 @@ function RandomForestClassifier() {
     }
 
     setLoading(true);
+    let bootTimer: number | undefined;
+
     try {
+      bootTimer = window.setTimeout(() => {
+        onBackendBooting(true);
+      }, 1500);
+
       const res = await fetch(`${API_BASE}/rf/classify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -347,8 +457,26 @@ function RandomForestClassifier() {
 
       const data: RFResponse = await res.json();
       setResult(data);
+
+      if (bootTimer) window.clearTimeout(bootTimer);
+      onBackendBooting(false);
     } catch (err: any) {
-      setError(err.message || "Failed to classify.");
+      if (bootTimer) window.clearTimeout(bootTimer);
+
+      const msg = err?.message || "Failed to classify.";
+      setError(msg);
+
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes("failed to fetch") ||
+        lower.includes("networkerror") ||
+        lower.includes("load failed")
+      ) {
+        onBackendBooting(true);
+        window.setTimeout(() => onBackendBooting(false), 10000);
+      } else {
+        onBackendBooting(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -419,7 +547,11 @@ function RandomForestClassifier() {
 }
 
 
-function HoroscopeEvaluator() {
+function HoroscopeEvaluator({
+  onBackendBooting,
+}: {
+  onBackendBooting: (active: boolean) => void;
+}) {
   const [sign, setSign] = useState<string>("aries");
   const [description, setDescription] = useState<string>("");
   const [started, setStarted] = useState(false);
@@ -436,7 +568,14 @@ function HoroscopeEvaluator() {
   const fetchHoroscope = async (round: number) => {
     setError(null);
     setLoading(true);
+
+    let bootTimer: number | undefined;
+
     try {
+      bootTimer = window.setTimeout(() => {
+        onBackendBooting(true);
+      }, 1500);
+
       const res = await fetch(`${API_BASE}/gpt/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -446,8 +585,26 @@ function HoroscopeEvaluator() {
 
       const data: HoroscopeResponse = await res.json();
       setCurrentHoroscope(data.horoscope);
+
+      if (bootTimer) window.clearTimeout(bootTimer);
+      onBackendBooting(false);
     } catch (err: any) {
-      setError(err.message || "Failed to generate horoscope.");
+      if (bootTimer) window.clearTimeout(bootTimer);
+
+      const msg = err?.message || "Failed to generate horoscope.";
+      setError(msg);
+
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes("failed to fetch") ||
+        lower.includes("networkerror") ||
+        lower.includes("load failed")
+      ) {
+        onBackendBooting(true);
+        window.setTimeout(() => onBackendBooting(false), 10000);
+      } else {
+        onBackendBooting(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -488,7 +645,7 @@ function HoroscopeEvaluator() {
   return (
     <section className="panel">
       <div className="panel-header">
-        <h2>AI-aided Horoscope Evaluator</h2>
+        <h2>AI Horoscope Evaluator</h2>
         <p>
           The system generates {TOTAL_ROUNDS} horoscopes. You rate each 1–5,
           and an accuracy score is computed.
@@ -550,7 +707,9 @@ function HoroscopeEvaluator() {
             </div>
           </div>
 
-          {loading && <div className="loading-state">Generating horoscope…</div>}
+          {loading && (
+            <div className="loading-state">Generating horoscope…</div>
+          )}
           {error && <div className="error-message">{error}</div>}
 
           {currentHoroscope && !loading && (
@@ -590,7 +749,7 @@ function HoroscopeEvaluator() {
           <div className="completion-card">
             <h3>Session complete!</h3>
             <p>
-              You rated {completedRounds} horoscopes.  
+              You rated {completedRounds} horoscopes. <br />
               Overall accuracy:
             </p>
             <div className="accuracy-display">
