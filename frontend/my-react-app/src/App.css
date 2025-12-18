@@ -158,7 +158,7 @@ html,
 .panel-header h2 {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #0f172a;
+  color: #ffffff;
   margin: 0 0 0.75rem;
   letter-spacing: -0.01em;
 }
@@ -280,7 +280,7 @@ html,
 .result-section h4 {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #0f172a;
+  color: #ffffff;
   margin: 0 0 0.75rem;
 }
 
@@ -704,6 +704,81 @@ html,
   }
 }
 
+.scroll-down-fab {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 9999;
+
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+
+  /* reset button defaults that throw off SVG centering */
+  padding: 0;
+  line-height: 0;
+  appearance: none;
+  -webkit-appearance: none;
+
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(17, 24, 39, 0.78);
+  backdrop-filter: blur(10px);
+
+  color: rgba(255, 255, 255, 0.92);
+
+  /* use flex instead of grid for better SVG centering across browsers */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.scroll-down-fab svg {
+  display: block;
+}
+
+
+.scroll-down-fab.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  animation: scrollFabFloat 1.6s ease-in-out infinite,
+    scrollFabOpacity 2.1s ease-in-out infinite;
+}
+
+.scroll-down-fab:hover {
+  transform: translateX(-50%) translateY(-2px);
+}
+
+@keyframes scrollFabFloat {
+  0% { transform: translateX(-50%) translateY(0px); }
+  50% { transform: translateX(-50%) translateY(-6px); }
+  100% { transform: translateX(-50%) translateY(0px); }
+}
+
+@keyframes scrollFabOpacity {
+  0% { opacity: 0.65; }
+  50% { opacity: 1; }
+  100% { opacity: 0.65; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-down-fab.is-visible {
+    animation: none;
+  }
+}
+
+
+.overfit-footnote-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 0.25rem;
+}
+
 @media (max-width: 480px) {
   .hero-section h1 {
     font-size: 1.75rem;
@@ -785,4 +860,61 @@ html,
   to {
     transform: rotate(360deg);
   }
+}
+
+.footnote-row {
+  margin-top: 10px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap; /* stacks nicely on smaller widths */
+}
+
+.footnote-aside {
+  flex: 0 1 320px;
+  min-width: 260px;
+
+  border-radius: 14px;
+  padding: 14px 16px;
+
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(10px);
+
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.footnote-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #f1f5f9;
+}
+
+.footnote-body {
+  color: #e2e8f0;
+}
+
+.footnote-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: #cbd5e1;
+}
+
+.footnote-list li {
+  margin: 6px 0;
+}
+
+.footnote-note {
+  flex: 1 1 320px;
+  min-width: 260px;
+}
+
+.footnote-note p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.45;
 }

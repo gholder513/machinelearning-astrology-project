@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import "./App.css";
-import { Sparkles, Brain, MessageSquare } from "lucide-react";
+import {
+  Sparkles,
+  Brain,
+  MessageSquare,
+  Info,
+  ChevronDown,
+} from "lucide-react";
 import RFMetricsPanel, { type RFMetricRow } from "./RFMetricsPanel";
 
 type TopExample = {
@@ -98,62 +104,353 @@ function BootOverlay({ visible }: { visible: boolean }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Root App
-// ---------------------------------------------------------------------------
+function ScrollToInputArrow({
+  targetId,
+  disabled = false,
+}: {
+  targetId: string;
+  disabled?: boolean;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (disabled) {
+      setVisible(false);
+      return;
+    }
+
+    let observer: IntersectionObserver | null = null;
+    let rafId: number | null = null;
+
+    rafId = window.requestAnimationFrame(() => {
+      const el = document.getElementById(targetId);
+      if (!el) {
+        setVisible(false);
+        return;
+      }
+
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          // visible when target is NOT on screen
+          setVisible(!entry.isIntersecting);
+        },
+        { threshold: 0.35 }
+      );
+
+      observer.observe(el);
+
+      // initialize immediately
+      const rect = el.getBoundingClientRect();
+      const inView = rect.top < window.innerHeight && rect.bottom > 0;
+      setVisible(!inView);
+    });
+
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      if (observer) observer.disconnect();
+    };
+  }, [targetId, disabled]);
+
+  const handleClick = () => {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+
+    // Hide instantly on click (as requested)
+    setVisible(false);
+
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  return (
+    <button
+      type="button"
+      aria-label="Scroll to input"
+      onClick={handleClick}
+      className={`scroll-down-fab ${visible ? "is-visible" : ""}`}
+    >
+      <ChevronDown size={22} />
+    </button>
+  );
+}
+
+function PurposePanel() {
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <section className="panel">
+      <div
+        className="panel-header"
+        style={{ display: "flex", gap: 12, alignItems: "flex-start" }}
+      >
+        <div style={{ marginTop: 2 }}>
+          <Info size={22} />
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+            }}
+          >
+            <h2 style={{ margin: 0 }}>Purpose of the Study & App</h2>
+
+            <button
+              className="btn-primary"
+              style={{
+                padding: "8px 12px",
+                fontSize: 14,
+                lineHeight: "18px",
+                whiteSpace: "nowrap",
+              }}
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? "Hide" : "Show"}
+            </button>
+          </div>
+
+          <p style={{ marginTop: 8 }}>
+            Contradictory to Bertram Forer's 1948 original findings{" "}
+            <a
+              href="https://en.wikipedia.org/wiki/Barnum_effect"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Bertram Forer's 1948 original findings
+            </a>
+            , current Astrology research and studies report a correlation
+            between birth circumstances and various life outcomes and
+            characteristics. Examples of this include studies attempting to{" "}
+            <a
+              href="https://www.researchgate.net/publication/305317657_Astrological_prediction_for_profession_using_classification_techniques_of_artificial_intelligence"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              predict profession
+            </a>{" "}
+            (see also{" "}
+            <a
+              href="https://www.mecs-press.org/ijmecs/ijmecs-v15-n4/IJMECS-V15-N4-3.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              this profession-focused ML study
+            </a>
+            ),{" "}
+            <a
+              href="https://www.researchgate.net/publication/351609280_Empirical_testing_of_few_fundamental_principles_of_Vedic_astrology_through_comparative_analysis_of_astrological_charts_of_cancer_diseased_persons_versus_persons_who_never_had_it"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              cancer susceptibility
+            </a>
+            ,{" "}
+            <a
+              href="https://sciencescholar.us/journal/index.php/ijhs/article/view/12531/8942"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              higher education / research studies status
+            </a>{" "}
+            (as odd and arbitrary as it may seem), as well as{" "}
+            <a
+              href="https://ieeexplore.ieee.org/document/10941579"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              other ML-based astrological outcome prediction work
+            </a>
+            . However, many of the studies that have linked astrology to real
+            world outcomes have been criticized for poor methodology, lack of
+            statistical power, and lack of proper controls for confounding
+            variables. Many of the models used in these studies overfit to noise
+            in the data taking away from their validity as scientific
+            contributions. Others have small sample sizes and others lack proper
+            validation on held-out test sets, all leading to inconclusive or
+            misleading results.
+          </p>
+
+          <div className="footnote-row">
+            <aside
+              className="footnote-aside"
+              aria-labelledby="overfit-footnote-title"
+            >
+              <div id="overfit-footnote-title" className="footnote-title">
+                ML footnote — Overfitting
+              </div>
+
+              <div className="footnote-body">
+                Definition: Overfitting happens when a model learns spurious
+                patterns or noise specific to the training data instead of the
+                underlying signal. An overfit model shows excellent performance
+                on training data but performs poorly on unseen (test/validation)
+                data.
+              </div>
+
+              <ul className="footnote-list">
+                <li>
+                  Common indicator: large gap between train and test accuracy.
+                </li>
+                <li>
+                  Mitigation: cross-validation, regularization, simpler models,
+                  more data, or early stopping.
+                </li>
+              </ul>
+            </aside>
+
+            <div className="footnote-note">
+              <p>
+                Note: when reading ML-based claims in small-sample studies,
+                watch for evidence of proper validation (held-out test sets,
+                cross-validation) — lacking this, reported effects may reflect
+                overfitting rather than generalizable findings.
+              </p>
+            </div>
+          </div>
+          <p style={{ marginTop: 12 }}>
+            This project explores whether modern NLP/ML models can learn *any*
+            consistent signal for zodiac prediction from text and how much of
+            the “accuracy” people feel is explained by broad, flattering
+            language (the Barnum effect), rather than true predictive validity.
+            Once data is aggregated we aim to use mathematical proof by
+            contradiction to analyze whether horoscopes can be “accurate” in any
+            meaningful scientific sense. This would make a significant
+            contribution to the space by demonstratng the applications of
+            Machine Learning even in arbirtrary or pseudoscientific domains.
+          </p>
+        </div>
+      </div>
+      {/* References:
+
+       https://ieeexplore.ieee.org/document/10941579 
+       https://www.mecs-press.org/ijmecs/ijmecs-v15-n4/IJMECS-V15-N4-3.pdf
+       https://www.researchgate.net/publication/305317657_Astrological_prediction_for_profession_using_classification_techniques_of_artificial_intelligence 
+       https://www.researchgate.net/publication/351609280_Empirical_testing_of_few_fundamental_principles_of_Vedic_astrology_through_comparative_analysis_of_astrological_charts_of_cancer_diseased_persons_versus_persons_who_never_had_it 
+       https://sciencescholar.us/journal/index.php/ijhs/article/view/12531/8942 
+       */}
+      {!expanded ? null : (
+        <div className="results">
+          <div className="result-section">
+            <h4>What we’re testing</h4>
+            <p className="hint" style={{ marginTop: 6 }}>
+              We treat zodiac prediction as an empirical NLP classification
+              problem. If results stay near chance, that supports the idea that
+              horoscope-style text doesn’t carry strong, sign-specific
+              linguistic structure. If results rise well above chance, we
+              investigate whether that’s due to dataset artifacts, writing
+              style, or other confounds. The goal is to eventually provide a
+              mathematical framework for understanding the relationship between
+              text and zodiac prediction. Once that is established we aim to use
+              mathematical proof by contradiction to analyze whether horoscopes
+              can be “accurate” in any meaningful scientific sense.
+            </p>
+          </div>
+
+          <div className="result-section">
+            <h4>What this app is for</h4>
+            <p className="hint" style={{ marginTop: 6 }}>
+              The UI is intentionally interactive so you can compare approaches
+              side-by-side and see what the models “latch onto.”
+            </p>
+
+            <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+              <li>
+                <strong>Embedding Classifier</strong> — predicts your sign by
+                similarity to sign “centroids” and shows nearest examples.
+              </li>
+              <li>
+                <strong>Random Forest Classifier</strong> — returns a
+                probability distribution across all signs and exposes
+                performance metrics.
+              </li>
+              <li>
+                <strong>Horoscope Evaluator</strong> — generates 10 personalized
+                horoscopes and lets you rate how accurate they feel, turning
+                “vibes” into a measurable score.
+              </li>
+            </ul>
+          </div>
+
+          <div className="result-section">
+            <h4>How to use it: </h4>
+            <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+              <li>
+                Write 2–6 sentences about your personality, habits, and
+                preferences.
+              </li>
+              <li>
+                Try the Embedding vs Random Forest tabs and compare predictions
+                + confidence.
+              </li>
+              <li>
+                Run the 10-round Horoscope Evaluator and see whether “accuracy”
+                persists across multiple generations.
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function App() {
   const [mode, setMode] = useState<Mode>("embed");
   const [backendBooting, setBackendBooting] = useState(false);
-
+  const targetId =
+    mode === "embed" ? "embed-input" : mode === "rf" ? "rf-input" : "gpt-input";
   return (
     <div className="app">
-      {/* Global overlay that shows when backend is spinning up */}
       <BootOverlay visible={backendBooting} />
-
+      <ScrollToInputArrow targetId={targetId} />
       <div className="hero-section">
         <div className="hero-content">
           <div className="hero-icon">
             <Sparkles size={48} />
           </div>
-          <h1>Zodiac Machine Learning Classifier </h1>
+          <h1>Zodiac Machine Learning Classifier</h1>
           <p>
-            The website that uses machine learning to guess your horoscope
-            trained on 2000+ characteristics and 700+ user fed descriptions.
-            Try the embedding model, random forest model, or AI-aided horoscope
-            evaluator.
+            An interactive NLP/ML demo that predicts zodiac signs from short
+            self-descriptions and explores why horoscopes can feel personally
+            accurate. Compare an embedding model, a Random Forest baseline, and
+            an AI-aided 10-round “accuracy” evaluator.{" "}
+            {/*:contentReference[oaicite:3]index=3 */}
           </p>
         </div>
         <div className="hero-gradient"></div>
       </div>
 
-      <nav className="tab-bar">
-        <button
-          className={mode === "embed" ? "tab active" : "tab"}
-          onClick={() => setMode("embed")}
-        >
-          <Brain size={18} />
-          <span>Embedding Classifier</span>
-        </button>
-
-        <button
-          className={mode === "rf" ? "tab active" : "tab"}
-          onClick={() => setMode("rf")}
-        >
-          <Sparkles size={18} />
-          <span>Machine Learning (Random Forest) Classifier</span>
-        </button>
-
-        <button
-          className={mode === "gpt" ? "tab active" : "tab"}
-          onClick={() => setMode("gpt")}
-        >
-          <MessageSquare size={18} />
-          <span>Horoscope Evaluator</span>
-        </button>
-      </nav>
-
       <main className="main">
+        <PurposePanel />
+
+        <nav className="tab-bar">
+          <button
+            className={mode === "embed" ? "tab active" : "tab"}
+            onClick={() => setMode("embed")}
+          >
+            <Brain size={18} />
+            <span>Embedding Classifier</span>
+          </button>
+
+          <button
+            className={mode === "rf" ? "tab active" : "tab"}
+            onClick={() => setMode("rf")}
+          >
+            <Sparkles size={18} />
+            <span>Machine Learning (Random Forest) Classifier</span>
+          </button>
+
+          <button
+            className={mode === "gpt" ? "tab active" : "tab"}
+            onClick={() => setMode("gpt")}
+          >
+            <MessageSquare size={18} />
+            <span>Horoscope Evaluator</span>
+          </button>
+        </nav>
+
         {mode === "embed" && (
           <EmbeddingClassifier onBackendBooting={setBackendBooting} />
         )}
@@ -333,10 +630,9 @@ function EmbeddingClassifier({
     }
   };
 
-  const sortedSimilarities =
-    result?.similarities
-      ? Object.entries(result.similarities).sort((a, b) => b[1] - a[1])
-      : [];
+  const sortedSimilarities = result?.similarities
+    ? Object.entries(result.similarities).sort((a, b) => b[1] - a[1])
+    : [];
 
   return (
     <section className="panel">
@@ -350,13 +646,18 @@ function EmbeddingClassifier({
 
       <div className="input-group">
         <textarea
+          id="embed-input"
           className="input-textarea"
           rows={4}
           placeholder="E.g., I love deep conversations, traveling alone..."
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
+        <button
+          className="btn-primary"
+          onClick={handleSubmit}
+          disabled={loading}
+        >
           {loading ? "Classifying..." : "Classify"}
         </button>
       </div>
@@ -387,9 +688,7 @@ function EmbeddingClassifier({
                         style={{ width: `${score * 100}%` }}
                       />
                     </div>
-                    <span className="similarity-score">
-                      {score.toFixed(4)}
-                    </span>
+                    <span className="similarity-score">{score.toFixed(4)}</span>
                   </div>
                 ))}
               </div>
@@ -482,10 +781,9 @@ function RandomForestClassifier({
     }
   };
 
-  const sortedProba =
-    result?.probabilities
-      ? Object.entries(result.probabilities).sort((a, b) => b[1] - a[1])
-      : [];
+  const sortedProba = result?.probabilities
+    ? Object.entries(result.probabilities).sort((a, b) => b[1] - a[1])
+    : [];
 
   return (
     <section className="panel">
@@ -499,6 +797,7 @@ function RandomForestClassifier({
 
       <div className="input-group">
         <textarea
+          id="rf-input"
           className="input-textarea"
           rows={4}
           placeholder="E.g., I love helping people, organizing things..."
@@ -506,7 +805,11 @@ function RandomForestClassifier({
           onChange={(e) => setText(e.target.value)}
         />
 
-        <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
+        <button
+          className="btn-primary"
+          onClick={handleSubmit}
+          disabled={loading}
+        >
           {loading ? "Classifying..." : "Classify with Random Forest"}
         </button>
       </div>
@@ -545,7 +848,6 @@ function RandomForestClassifier({
     </section>
   );
 }
-
 
 function HoroscopeEvaluator({
   onBackendBooting,
@@ -647,8 +949,8 @@ function HoroscopeEvaluator({
       <div className="panel-header">
         <h2>AI Horoscope Evaluator</h2>
         <p>
-          The system generates {TOTAL_ROUNDS} horoscopes. You rate each 1–5,
-          and an accuracy score is computed.
+          The system generates {TOTAL_ROUNDS} horoscopes. You rate each 1–5, and
+          an accuracy score is computed.
         </p>
       </div>
 
@@ -672,6 +974,7 @@ function HoroscopeEvaluator({
           <div className="form-field">
             <label>Short description of yourself</label>
             <textarea
+              id="gpt-input"
               className="input-textarea"
               rows={3}
               placeholder="E.g., I love sunsets, painting, and shopping..."
@@ -736,9 +1039,7 @@ function HoroscopeEvaluator({
                 </div>
               </div>
 
-              <p className="hint">
-                4–5 = +1 point, 2–3 = +0.5, 1 = +0.
-              </p>
+              <p className="hint">4–5 = +1 point, 2–3 = +0.5, 1 = +0.</p>
             </>
           )}
         </div>
@@ -752,9 +1053,7 @@ function HoroscopeEvaluator({
               You rated {completedRounds} horoscopes. <br />
               Overall accuracy:
             </p>
-            <div className="accuracy-display">
-              {overallAccuracy.toFixed(2)}
-            </div>
+            <div className="accuracy-display">{overallAccuracy.toFixed(2)}</div>
 
             <button
               className="btn-primary"
