@@ -195,7 +195,7 @@ function PurposePanel() {
               alignItems: "center",
             }}
           >
-            <h2 style={{ margin: 0 }}>Purpose of the Study & App</h2>
+            <h2 style={{ margin: 0 }}>Purpose</h2>
 
             <button
               className="btn-primary"
@@ -640,7 +640,9 @@ function EmbeddingClassifier({
         <h2>Embedding-based Classifier (Sentence Transformers)</h2>
         <p>
           Enter a description. The model predicts your zodiac sign using cosine
-          similarity to centroid embeddings.
+          similarity to centroid embeddings. The more the model's predicted sign
+          is wrong, the more evidence supports the Barnum effect and this
+          study's research.
         </p>
       </div>
 
